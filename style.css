@@ -1,0 +1,14 @@
+svg {
+    background-color: bisque;
+}
+
+.wrap{
+    padding: 5;
+    margin-top: 0.25em;
+}
+
+.grid-container {
+    display: grid;
+    grid-row-gap: 50px;
+    grid-template-columns: auto auto
+  }
