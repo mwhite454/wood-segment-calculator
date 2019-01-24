@@ -1,9 +1,13 @@
 const svg = document.getElementById('mySVG')
 const myForm = document.getElementById('myInputs');
 const TWO_PI = 6.28318530717958647693
+const pixels_per_cm = 35.43307
+const cm_per_inch = 2.54
+var unit_modifier = 0
 const myInputs = [
-    {label: 'SVG X scale', id: 'x', type: 'text', action: (x)=>{svg.setAttribute('width', `${x}cm`)}},
-    {label: 'SVG Y scale', id: 'y', type: 'text', action: (y)=>{svg.setAttribute('height', `${y}cm`)}},
+    {label: 'Unit of Measure (in or cm)', id: 'unit', type: 'text', action: (unit)=>{unit_modifier = unit == 'cm' ? pixels_per_cm : pixels_per_cm * cm_per_inch}},
+    {label: 'SVG X scale', id: 'x', type: 'text', action: (x)=>{svg.setAttribute('width', `${x}${inputs.unit.value}`)}},
+    {label: 'SVG Y scale', id: 'y', type: 'text', action: (y)=>{svg.setAttribute('height', `${y}${inputs.unit.value}`)}},
     {label: 'Ring Count', id: 'rCount', type: 'text'},
     {label: 'Segments per ring', id: 'segCount', type: 'text'},
     {label: 'Ring Diameter', id: 'rDiameter', type: 'text'},
@@ -13,29 +17,21 @@ const myInputs = [
     {label: 'Draw SVG', id:'draw', type: 'button', action: ()=>{renderSVG()}}
 ]
 
-
-
-const svgChildren = [];
-
 function polygonSegmentLength(points){
     //returns the angle and unique lengths of inner and outer radius for a given polygon
     let angle = TWO_PI / points;
     let radius = parseFloat(inputs.rDiameter.value, 10) / 2;
     let innerRadius = radius - parseFloat(inputs.wThickness.value, 10);
     let center = {x: parseFloat(inputs.x.value, 10)/2, y: parseFloat(inputs.y.value, 10)/2}
-    //let outerCoordinate1 = {x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius }
-    //let innerCoordinate1 = {x: center.x + Math.cos(angle) * innerRadius, y: center.y + Math.sin(angle) * innerRadius }
-    //let outerCoordinate2 = {x: moveX(outerCoordinate1.x, angle, radius), y: moveY(outerCoordinate1.y, angle, radius)} 
-    //let innerCoordinate2 = {x: moveX(innerCoordinate1.x, angle, innerRadius), y: moveY(innerCoordinate1.y, angle, innerRadius)}
     let outerRing = polygon(center.x, center.y, radius, points)
     let innerRing = polygon(center.x, center.y, innerRadius, points)
     let outerCoordinate1 = {x: outerRing[0][0], y: outerRing[0][1]}
     let outerCoordinate2 = {x: outerRing[1][0], y: outerRing[1][1] }
     let innerCoordinate1 = {x: innerRing[0][0], y: innerRing[0][1]}
     let innerCoordinate2 = {x: innerRing[1][0], y: innerRing[1][1] }
-    let resp = {angle: angle, outerSegLength: distance(outerCoordinate1, outerCoordinate2), innerSegLength: distance(innerCoordinate1, innerCoordinate2)};
-    drawPolygon(outerRing)
-    drawPolygon(innerRing)
+    let resp = {angle: angle, longLeg: distance(outerCoordinate1, outerCoordinate2), shortLeg: distance(innerCoordinate1, innerCoordinate2)};
+    //drawPolygon(outerRing)
+    //drawPolygon(innerRing)
     drawLine(outerCoordinate1, outerCoordinate2)
     drawLine(innerCoordinate1, innerCoordinate2)
     console.log(resp)
@@ -45,7 +41,7 @@ function polygonSegmentLength(points){
 function drawLine (coord1, coord2){
     let aLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     let g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
-    g.setAttribute('transform', 'scale(35.43307)')
+    g.setAttribute('transform', `scale(${unit_modifier})`)
     aLine.setAttribute('x1', `${coord1.x}`)
     aLine.setAttribute('y1', `${coord1.y}`)
     aLine.setAttribute('x2', `${coord2.x}`)
@@ -59,9 +55,9 @@ function drawLine (coord1, coord2){
 function drawPolygon (points){
     let pLine = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     let g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
-    g.setAttribute('transform', 'scale(35.43307)')
+    g.setAttribute('transform', `scale(${unit_modifier})`)
     pLine.setAttribute('stroke', 'red');
-    pLine.setAttribute('stroke-width', 0.25);
+    pLine.setAttribute('stroke-width', 0.05);
     pLine.setAttribute('fill', 'none')
     let coordinates = points.reduce((a,c)=>{
         a+= ` ${c.join(',')}`
@@ -81,8 +77,6 @@ function polygon (x, y, radius, nPoints){
         set.push(y + Math.sin(a) * radius);
         points.push(set)
     }
-    //drawPolygon(points)
-    console.log(points)
     return points
 }
 
@@ -105,19 +99,44 @@ function moveY(y, a, r){
 }
 
 function renderSVG(){
-    polygonSegmentLength(inputs.segCount.value)
-    //const elements = svgChildren.map(makeTrapezoid)
-    //elements.forEach(x => svg.appendChild(x))
+   let segmentData = polygonSegmentLength(inputs.segCount.value)
+   let offSetX = 1 //TO DO make this a global variable`
+   let offSetY = 1
+   for(let i = 0; i< inputs.segCount.value; i++){
+       if(i%2==0){
+            make_right_Trapezoid(offSetX, offSetY, parseFloat(inputs.wThickness.value, 10), segmentData.longLeg, segmentData.shortLeg)
+            offSetY += segmentData.longLeg 
+       } else {
+            make_left_Trapezoid(offSetX, offSetY, parseFloat(inputs.wThickness.value, 10), segmentData.longLeg, segmentData.shortLeg)
+            offSetY += segmentData.shortLeg
+       }
+   }
+   
+}
+function make_left_Trapezoid(startX, startY, wallThickness, longLeg, shortLeg){
+    let points = []
+    let diff = (longLeg - shortLeg) / 2
+    points.push([startX + wallThickness, startY - diff])
+    points.push([points[0][0], points[0][1] + longLeg])
+    points.push([startX, points[1][1] - diff])
+    points.push([startX, points[2][1] - shortLeg])
+    drawPolygon(points)
+
+}
+function make_right_Trapezoid(startX, startY, wallThickness, longLeg, shortLeg){
+    let points = []
+    let diff = (longLeg - shortLeg) / 2
+    points.push([startX, startY])
+    points.push([startX + wallThickness, startY + diff])
+    points.push([points[1][0], points[1][1] + shortLeg])
+    points.push([startX, points[2][1] + diff])
+    drawPolygon(points)
 }
 
 function clearSVG(){
-    console.log('click')
-
-    console.log(svg.hasChildNodes())
     while(svg.hasChildNodes()){
         let elem = svg.firstChild
         elem.remove()
-        //svg.removeChild(svg.firstChild)
     }
     //svgChildren.length = 0;
     //renderSVG()
